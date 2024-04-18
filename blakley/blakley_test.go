@@ -106,27 +106,65 @@ func TestSplit_invalid(t *testing.T) {
 	}
 }
 
+func TestCompress(t *testing.T) {
+	a := [][][]byte{
+		{
+			{1, 1},
+			{2, 2},
+			{3, 3},
+		},
+		{
+			{4, 4},
+			{5, 5},
+			{6, 6},
+		},
+	}
+	b := [][]byte{
+		{1, 1, 2, 2, 3, 3, 2},
+		{4, 4, 5, 5, 6, 6, 2},
+	}
+
+	assert.Equal(t, b, compress(a))
+}
+
+func TestDecompress(t *testing.T) {
+	a := [][][]byte{
+		{
+			{1, 1},
+			{2, 2},
+			{1, 1},
+		},
+		{
+			{4, 4},
+			{5, 5},
+			{6, 6},
+		},
+	}
+	b := [][]byte{
+		{1, 1, 2, 2, 1, 1, 2},
+		{4, 4, 5, 5, 6, 6, 2},
+	}
+	c, err := decompress(b)
+	if err != nil {
+		t.Fatalf("bad:%s,%v", c, err)
+	}
+	assert.Equal(t, a, c)
+}
+
 func TestSplit(t *testing.T) {
-	secret := []byte("just a simple test")
-	out, err := Split(secret, 8, 3)
+	secret := []byte("what the fuck is my undergraduate program")
+	out, err := Split(secret, 5, 4)
+	slen := len(secret)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
-	if len(out) != 8 {
+	if len(out) != 5 {
 		t.Fatalf("bad: %v", len(out))
 	}
 	for i := range out {
-		if len(out[i]) != len(out[0]) {
-			t.Fatalf("bad: %v,%v,%v", len(out[i]), len(out[0]), i)
-		}
-		if len(out[i]) != len(secret) {
-			t.Fatalf("bad:%v,%v", len(out[i]), len(secret))
-		}
-		for j := range out[i] {
-			if len(out[i][j]) != 3 {
-				t.Fatalf("bad: %v", len(out[i][j]))
-			}
+		if (len(out[i]) - 1) != 4*slen {
+			t.Fatalf("bad:%v,%v,%v", len(out[i]), len(secret), i)
 		}
 	}
 }
@@ -137,54 +175,36 @@ func TestCombine_invalid(t *testing.T) {
 		t.Fatalf("should err")
 	}
 
-	partA := [][]byte{
-		{1, 2, 3, 4},
-		{5, 6, 7, 8},
-		{1, 2, 3},
+	// Mismatch in length
+	parts := [][]byte{
+		[]byte("foo"),
+		[]byte("ba"),
 	}
-	partB := [][]byte{
-		{1, 2, 3, 4},
-		{5, 6, 7, 8},
-		{1, 2, 3},
-		{2, 3},
-	}
-	partC := [][]byte{
-		{1, 2, 3, 4},
-		{5, 6, 7, 8},
-		{1, 2, 3, 4},
-		{2, 3, 4, 5},
-	}
-	partsA := [][][]byte{
-		partA,
-		partB,
-	}
-	partsB := [][][]byte{
-		partA,
-	}
-	partsC := [][][]byte{
-		partB,
-		partC,
-	}
-
-	//Mismatch in the length of secret
-	if _, err := Combine(partsA); err == nil {
+	if _, err := Combine(parts); err == nil {
 		t.Fatalf("should err")
 	}
 
-	//Mismatch in shares
-	if _, err := Combine(partsC); err == nil {
+	//Too short
+	parts = [][]byte{
+		[]byte("f"),
+		[]byte("b"),
+	}
+	if _, err := Combine(parts); err == nil {
 		t.Fatalf("should err")
 	}
 
-	//The number of parties < 2
-	if _, err := Combine(partsB); err == nil {
+	parts = [][]byte{
+		[]byte("foo"),
+		[]byte("foo"),
+	}
+	if _, err := Combine(parts); err == nil {
 		t.Fatalf("should err")
 	}
 }
 
 func TestCombine(t *testing.T) {
-	secret := []byte("VGhpcyBpcyBhIHNpbXBsZSB0ZXN0IQpBbmQgSSB3YW50IHRvIGRyaW5rIGEgY3VwIG9mIHBvcDop")
-	shares, err := Split(secret, 5, 3)
+	secret := []byte("VGhpcyBpcyBhIHNpbXBsZSB0ZXN0IQpBbmQgSSB3YW50IHRvIGRyaW5rIGEgY3VwIGmIHBvcDop")
+	shares, err := Split(secret, 8, 5)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}

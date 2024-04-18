@@ -137,12 +137,51 @@ func solve(matrix [][]byte, b []byte, threshold int) (uint8, error) {
 	return ret[0], nil
 }
 
+func compress(shares [][][]byte) [][]byte {
+	parts := len(shares)
+	blen := len(shares[0])
+	threshold := len(shares[0][0])
+	ret := make([][]byte, parts)
+	for i, v := range shares {
+		ret[i] = make([]byte, 0, blen*threshold+1)
+		for _, s := range v {
+			ret[i] = append(ret[i], s...)
+		}
+		ret[i] = append(ret[i], byte(threshold))
+	}
+	return ret
+}
+
+func decompress(shares [][]byte) ([][][]byte, error) {
+	parts := len(shares)
+	tmp := len(shares[0]) - 1
+	threshold := int(shares[0][tmp])
+	if threshold < 2 || parts < threshold {
+		return nil, fmt.Errorf("not enough shares to reconstruct")
+	}
+	var blen int
+	if tmp%threshold != 0 {
+		return nil, fmt.Errorf("decompress failed")
+	} else {
+		blen = tmp / threshold
+	}
+	ret := make([][][]byte, parts)
+	for i := range ret {
+		ret[i] = make([][]byte, blen)
+		for j := range ret[i] {
+			ret[i][j] = make([]byte, threshold)
+			copy(ret[i][j], shares[i][j*threshold:(j+1)*threshold])
+		}
+	}
+	return ret, nil
+}
+
 // Split takes an arbitrarily long secret and generates a `parts`
 // number of shares, `threshold` of which are required to reconstruct
 // the secret. The parts and threshold must be at least 2, and less
 // than 256. The returned shares are subsecret of each party of each
 // secret byte 'secret[i]'.
-func Split(secret []byte, parts, threshold int) ([][][]byte, error) {
+func Split(secret []byte, parts, threshold int) ([][]byte, error) {
 	//Sanity check for the secret
 	if parts < threshold {
 		return nil, fmt.Errorf("parts cannot be less than threshold")
@@ -193,41 +232,32 @@ func Split(secret []byte, parts, threshold int) ([][][]byte, error) {
 		}
 	}
 
-	return shares, nil
+	return compress(shares), nil
 }
 
-func Combine(shares [][][]byte) ([]byte, error) {
+func Combine(share [][]byte) ([]byte, error) {
 	//Sanity check for the shares
-	if shares == nil {
+	if share == nil {
 		return nil, fmt.Errorf("cannot combine nil shares")
 	}
-	for i := range shares {
-		if shares[i] == nil {
+	for i := range share {
+		if share[i] == nil {
 			return nil, fmt.Errorf("the %vth share invalid,cannot combine nil shares", i)
 		}
-		if len(shares[i]) != len(shares[0]) {
+		if len(share[i]) != len(share[0]) {
 			return nil, fmt.Errorf("invalid shares provided:party %v", i)
 		}
-		for j := range shares[i] {
-			if shares[i][j] == nil {
-				return nil, fmt.Errorf("the %vth share invalid,cannot combine nil shares", i)
-			}
-			if len(shares[i][j]) != len(shares[0][0]) {
-				return nil, fmt.Errorf("invalid shares provided by party %v", i)
-			}
-		}
 	}
-
+	shares, err := decompress(share)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reconstruct: %w", err)
+	}
 	b := len(shares[0])
 	t := len(shares[0][0])
-	//Verify enough parts have been provided
-	//Note that len(shares[0][0]) == threshold 't'
-	//len(shares) == the number of participants
+
 	if len(shares) < t || len(shares) < 2 {
 		return nil, fmt.Errorf("not enough shares provided")
 	}
-
-	var err error
 	secret := make([]byte, b)
 	vector := make([]byte, t)
 	//Reconstruct each byte
