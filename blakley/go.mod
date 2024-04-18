@@ -1,4 +1,4 @@
-module blakley
+module github.com/MuggleLego/secret-sharing/blakley
 
 go 1.21.5
 
